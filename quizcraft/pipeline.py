@@ -49,7 +49,37 @@ _META_QUESTION_RE = re.compile(
 )
 
 _BANNED_MCQ_RE = re.compile(r"(all of the above|以上皆是|以上皆對|以上皆為|以上皆正確)", re.IGNORECASE)
-_QUESTION_WORD_RE = re.compile(r"(什麼|為何|如何|哪|幾|多少|是否|能否|可否|嗎|呢)")
+_QUESTION_WORD_RE = re.compile(r"(什麼|為何|如何|哪|何|何者|何種|幾|多少|是否|能否|可否|嗎|呢)")
+
+_KEYPOINT_VERB_HINTS = (
+    "是",
+    "為",
+    "可",
+    "能",
+    "會",
+    "導致",
+    "影響",
+    "促使",
+    "造成",
+    "顯示",
+    "反映",
+    "使得",
+    "推動",
+    "形成",
+    "包含",
+    "採取",
+    "實施",
+    "改變",
+    "轉變",
+    "增加",
+    "減少",
+    "建立",
+    "整合",
+    "提升",
+    "改善",
+    "擴大",
+    "調整",
+)
 
 _INCOMPLETE_SUFFIXES = (
     "並",
@@ -263,6 +293,34 @@ def _sentences_from_mini_summaries(mini_summaries: List[MiniSummary]) -> List[st
     return sentences
 
 
+def _summary_has_support(summary: str, fallback_sentences: List[str]) -> bool:
+    if not summary or not fallback_sentences:
+        return False
+    keywords: List[str] = []
+    for sentence in fallback_sentences:
+        keywords.extend(re.findall(r"[一-鿿]{2,}", sentence))
+        keywords.extend(re.findall(r"[A-Za-z]{3,}", sentence))
+    keywords = list(dict.fromkeys(keywords))
+    if not keywords:
+        return False
+    matches = [keyword for keyword in keywords if keyword in summary]
+    required = 1 if len(keywords) < 6 else 2
+    return len(matches) >= required
+
+
+def _is_keypoint_statement(keypoint: str) -> bool:
+    if len(keypoint) < 10:
+        return False
+    if _is_incomplete_sentence(keypoint):
+        return False
+    if not any(hint in keypoint for hint in _KEYPOINT_VERB_HINTS):
+        return False
+    if re.search(r"(影響|問題|改革|建設|體制|政策|統治|發展|變遷)$", keypoint):
+        if not re.search(r"(導致|造成|使|因此|所以|促使|推動|改變|形成|反映|顯示)", keypoint):
+            return False
+    return True
+
+
 def _normalize_keypoints(raw_keypoints: List[str], fallback_sentences: List[str]) -> List[str]:
     cleaned: List[str] = []
     for kp in raw_keypoints:
@@ -270,6 +328,8 @@ def _normalize_keypoints(raw_keypoints: List[str], fallback_sentences: List[str]
         kp = re.sub(r"\(\s*\)", "", kp).strip()
         kp = kp.rstrip("。；; ")
         if not kp or _is_incomplete_sentence(kp):
+            continue
+        if not _is_keypoint_statement(kp):
             continue
         if kp not in cleaned:
             cleaned.append(kp)
@@ -279,6 +339,8 @@ def _normalize_keypoints(raw_keypoints: List[str], fallback_sentences: List[str]
                 break
             candidate = sentence.strip().rstrip("。")
             if not candidate or _is_incomplete_sentence(candidate):
+                continue
+            if not _is_keypoint_statement(candidate):
                 continue
             if candidate not in cleaned:
                 cleaned.append(candidate)
@@ -357,6 +419,8 @@ def _normalize_sections(
             if ms:
                 fallback_sentences.extend(_split_sentences(ms.get("mini_summary", "")))
         summary = _normalize_paragraph(summary, 2, 4, fallback_sentences)
+        if not _summary_has_support(summary, fallback_sentences):
+            summary = _normalize_paragraph("", 2, 4, fallback_sentences)
         citations = _normalize_citations(raw.get("citations"))
         citations = [c for c in citations if c.get("chunk_id") in chunk_lookup]
         if len(citations) < 2:
@@ -491,6 +555,7 @@ def _build_summary_block_from_mini(
     sections = _ensure_section_coverage(sections, selected_chunks)
     keypoints = _normalize_keypoints([], fallback_sentences)
     return {"overview": overview, "sections": sections, "keypoints": keypoints}
+
 
 def _citation_tag(citation: Dict[str, str | int]) -> str:
     return f"p{citation['page']}:{citation['chunk_id']}"

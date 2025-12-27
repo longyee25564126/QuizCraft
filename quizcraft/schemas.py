@@ -106,12 +106,20 @@ def _strip_choice_prefix(text: str) -> str:
     return re.sub(r"^[A-Da-d][\s\).、:-]+", "", text).strip()
 
 
+def _choice_text(choice: Any) -> str:
+    if isinstance(choice, dict):
+        for key in ("text", "label", "content", "choice", "value"):
+            if key in choice and choice[key]:
+                return str(choice[key]).strip()
+    return str(choice).strip()
+
+
 def _normalize_mcq_choices(choices: List[Any]) -> List[str]:
     normalized: List[str] = []
     for idx in range(4):
         if idx >= len(choices):
             break
-        raw = str(choices[idx]).strip()
+        raw = _choice_text(choices[idx])
         raw = _strip_choice_prefix(raw)
         prefix = f"{chr(ord('A') + idx)} "
         normalized.append(f"{prefix}{raw}".strip())

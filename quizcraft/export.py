@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict
 
 from quizcraft.schemas import QuizOutput
@@ -14,6 +15,21 @@ def _format_quotes(quotes) -> str:
     if not quotes:
         return "N/A"
     return " / ".join(q.get("quote", "") for q in quotes if q.get("quote"))
+
+
+def _choice_text(choice) -> str:
+    if isinstance(choice, dict):
+        for key in ("text", "label", "content", "choice", "value"):
+            if choice.get(key):
+                return str(choice[key]).strip()
+    return str(choice).strip()
+
+
+def _format_choice_line(choice: str, letter: str, prefix: str) -> str:
+    text = _choice_text(choice)
+    if re.match(rf"^{letter}[\s\).、:-]", text):
+        return f"{prefix}{text}"
+    return f"{prefix}{letter}. {text}"
 
 
 def export_markdown(output: QuizOutput, path: str) -> None:
@@ -50,7 +66,7 @@ def export_markdown(output: QuizOutput, path: str) -> None:
         if q.get("type") == "mcq":
             for i, choice in enumerate(q.get("choices", []), start=1):
                 letter = chr(ord("A") + i - 1)
-                lines.append(f"- {letter}. {choice}")
+                lines.append(_format_choice_line(choice, letter, "- "))
             if q.get("correct_option"):
                 lines.append(f"**Correct Option:** {q.get('correct_option')} ")
         lines.append(f"**Answer:** {q.get('answer', '')}")
@@ -100,7 +116,7 @@ def export_text(output: QuizOutput, path: str) -> None:
         if q.get("type") == "mcq":
             for i, choice in enumerate(q.get("choices", []), start=1):
                 letter = chr(ord("A") + i - 1)
-                lines.append(f"  {letter}. {choice}")
+                lines.append(_format_choice_line(choice, letter, "  "))
             if q.get("correct_option"):
                 lines.append(f"Correct Option: {q.get('correct_option')}")
         lines.append(f"Answer: {q.get('answer', '')}")

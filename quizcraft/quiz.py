@@ -12,6 +12,21 @@ def _normalize_tf(text: str) -> str:
         return "false"
     return normalized
 
+def _choice_text(choice) -> str:
+    if isinstance(choice, dict):
+        for key in ("text", "label", "content", "choice", "value"):
+            if choice.get(key):
+                return str(choice[key]).strip()
+    return str(choice).strip()
+
+
+def _format_choice_line(choice: str, letter: str) -> str:
+    text = _choice_text(choice)
+    if re.match(rf"^{letter}[\s\).、:-]", text):
+        return text
+    return f"{letter}. {text}"
+
+
 
 def _extract_choice_letter(text: str) -> str:
     match = re.search(r"\b([A-Da-d])\b", text)
@@ -92,7 +107,8 @@ def run_quiz(questions: List[Question]) -> Tuple[int, List[str]]:
         if question.get("type") == "mcq":
             for i, choice in enumerate(question.get("choices", []), start=1):
                 letter = chr(ord("A") + i - 1)
-                print(f"  {letter}. {choice}")
+                formatted = _format_choice_line(choice, letter)
+                print(f"  {formatted}")
 
         user_answer = input("Your answer: ").strip()
         is_correct = grade_answer(question, user_answer)
