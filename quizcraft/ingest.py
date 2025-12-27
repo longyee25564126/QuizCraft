@@ -7,6 +7,11 @@ from quizcraft.utils import clean_text, log_step
 
 def ingest_pdf(path: str) -> List[Dict[str, str]]:
     log_step(f"Ingest PDF: {path}")
+    if path.lower().endswith(".txt"):
+        with open(path, "r", encoding="utf-8") as handle:
+            text = handle.read()
+        return [{"page": 1, "text": clean_text(text)}]
+
     reader = PdfReader(path)
     pages: List[Dict[str, str]] = []
     for idx, page in enumerate(reader.pages, start=1):

@@ -1,4 +1,5 @@
 import math
+import random
 from typing import Callable, Dict, List, Tuple
 
 from quizcraft.utils import log_step
@@ -41,3 +42,64 @@ def search_index(
         scored.append((_cosine_similarity(query_emb, emb), chunk))
     scored.sort(key=lambda item: item[0], reverse=True)
     return [item[1] for item in scored[:top_k]]
+
+
+def select_chunks(
+    chunks: List[Dict[str, str]],
+    embeddings: List[List[float]],
+    embed: EmbeddingFunc,
+    top_k: int,
+    seed: int,
+    balanced: bool = True,
+) -> List[Dict[str, str]]:
+    log_step(f"Selector: top {top_k} chunks")
+    queries = [
+        "definition",
+        "theorem",
+        "algorithm",
+        "conclusion",
+        "summary",
+        "keypoint",
+        "重要",
+        "結論",
+        "定義",
+        "方法",
+    ]
+    query_embeddings = [embed(q) for q in queries]
+
+    scored: List[Tuple[float, Dict[str, str]]] = []
+    for chunk, emb in zip(chunks, embeddings):
+        score = max(_cosine_similarity(emb, q_emb) for q_emb in query_embeddings)
+        scored.append((score, chunk))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+
+    if not balanced:
+        return [item[1] for item in scored[:top_k]]
+
+    pages = {chunk["page"] for chunk in chunks}
+    total_pages = max(pages) if pages else 1
+    bucket_size = max(1, total_pages // 10)
+    bucket_limits: Dict[int, int] = {}
+    max_per_bucket = max(1, top_k // max(1, min(10, total_pages)))
+
+    random.seed(seed)
+    selected: List[Dict[str, str]] = []
+    remainder: List[Dict[str, str]] = []
+
+    for _, chunk in scored:
+        bucket = (chunk["page"] - 1) // bucket_size
+        count = bucket_limits.get(bucket, 0)
+        if count < max_per_bucket:
+            selected.append(chunk)
+            bucket_limits[bucket] = count + 1
+        else:
+            remainder.append(chunk)
+        if len(selected) >= top_k:
+            break
+
+    if len(selected) < top_k:
+        needed = top_k - len(selected)
+        selected.extend(remainder[:needed])
+
+    return selected[:top_k]

@@ -4,7 +4,8 @@ Lecture PDF → Summary → Quiz. An AI tutor that generates evidence-backed que
 
 ## Features
 - PDF ingest with page metadata and chunk IDs
-- 100–150 字繁中摘要 + 3–5 重點條列
+- Long-doc safe pipeline (selector + map-reduce)
+- 100–150 字繁中摘要 + 3–5 重點條列（附 citations）
 - 5 題（可調）T/F 或 MCQ 題庫，附引用證據與解析
 - Verify + rewrite：證據不足就重寫題目
 - Quiz 模式：逐題作答、給提示、顯示解析與引用
@@ -35,10 +36,16 @@ Outputs are saved to `outputs/output.json`, `outputs/output.md`, and `outputs/ou
 ```bash
 python main.py \
   --pdf /path/to/lecture.pdf \
-  --question-count 5 \
+  --n-questions 5 \
   --question-types tf,mcq \
-  --summary-min 100 \
-  --summary-max 150 \
+  --summary-len 120 \
+  --chunk-chars 1000 \
+  --overlap-chars 120 \
+  --top-k-chunks 60 \
+  --long-doc-threshold-pages 30 \
+  --ollama-base-url http://localhost:11434 \
+  --chat-timeout 120 \
+  --reduce-timeout 240 \
   --quiz
 ```
 
@@ -46,12 +53,40 @@ Environment variables:
 - `OLLAMA_BASE_URL`
 - `QUIZCRAFT_CHAT_MODEL`
 - `QUIZCRAFT_EMBED_MODEL`
+- `QUIZCRAFT_CHUNK_CHARS`, `QUIZCRAFT_OVERLAP_CHARS`
+- `QUIZCRAFT_TOP_K_CHUNKS`, `QUIZCRAFT_MAX_CHUNKS`, `QUIZCRAFT_LONG_DOC_PAGES`
 
-## Container (Optional)
+## Podman + Ollama Container (Demo Setup)
+### 1) Start Ollama container (if not running)
+```bash
+podman pod create --name ai-pod -p 11434:11434
+podman run -d --name ollama --pod ai-pod -v ollama:/root/.ollama ollama/ollama
+podman exec -it ollama ollama pull llama3.1:8b-instruct-q8_0
+podman exec -it ollama ollama pull nomic-embed-text:v1.5
+```
+
+### 2) Run QuizCraft with Podman (CLI)
 ```bash
 podman build -t quizcraft -f Containerfile .
 podman run --rm -it \
   --add-host=host.containers.internal:host-gateway \
+  -e OLLAMA_BASE_URL=http://host.containers.internal:11434 \
   -v "$PWD:/app:Z" \
   quizcraft --pdf /app/lecture.pdf --quiz
 ```
+
+### 3) Shortcut script
+```bash
+./run_podman.sh /app/lecture.pdf /app/outputs
+```
+
+## Tests
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+## Notes
+- If running inside a container, `OLLAMA_BASE_URL` defaults to `http://host.containers.internal:11434`.
+- Summary/keypoints include citations in the format `p{page}:{chunk_id}`.
+- Long documents use selector + map-reduce; reduce step never re-feeds the full PDF.

@@ -7,8 +7,9 @@ from quizcraft.utils import extract_json
 
 
 class OllamaClient:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, default_timeout: int = 60) -> None:
         self.base_url = base_url.rstrip("/")
+        self.default_timeout = default_timeout
 
     def check_health(self) -> bool:
         try:
@@ -24,7 +25,7 @@ class OllamaClient:
         messages: List[Dict[str, str]],
         format_json: bool = False,
         options: Optional[Dict[str, Any]] = None,
-        timeout: int = 60,
+        timeout: Optional[int] = None,
     ) -> str:
         payload: Dict[str, Any] = {
             "model": model,
@@ -35,7 +36,11 @@ class OllamaClient:
             payload["format"] = "json"
         if options:
             payload["options"] = options
-        resp = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=timeout)
+        resp = requests.post(
+            f"{self.base_url}/api/chat",
+            json=payload,
+            timeout=timeout or self.default_timeout,
+        )
         resp.raise_for_status()
         data = resp.json()
         return data["message"]["content"]
@@ -45,8 +50,9 @@ class OllamaClient:
         model: str,
         messages: List[Dict[str, str]],
         options: Optional[Dict[str, Any]] = None,
+        timeout: Optional[int] = None,
     ) -> Dict[str, Any]:
-        content = self.chat(model, messages, format_json=True, options=options)
+        content = self.chat(model, messages, format_json=True, options=options, timeout=timeout)
         return extract_json(content)
 
     def embed(self, model: str, text: str, timeout: int = 60) -> List[float]:

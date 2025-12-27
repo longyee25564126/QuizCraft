@@ -6,6 +6,21 @@ class Citation(TypedDict):
     chunk_id: str
 
 
+class MiniSummary(TypedDict):
+    page: int
+    chunk_id: str
+    mini_summary: str
+    keywords: List[str]
+    citations: List[Citation]
+
+
+class Concept(TypedDict):
+    name: str
+    description: str
+    citations: List[Citation]
+    difficulty: str
+
+
 class Question(TypedDict, total=False):
     id: str
     type: str
@@ -77,3 +92,42 @@ def normalize_questions(raw_questions: Any) -> List[Question]:
         if isinstance(raw, dict):
             questions.append(normalize_question(raw, f"q{idx}"))
     return questions
+
+
+def normalize_mini_summary(raw: Dict[str, Any], page: int, chunk_id: str) -> MiniSummary:
+    mini_summary = str(raw.get("mini_summary", "")).strip()
+    keywords_raw = raw.get("keywords") if isinstance(raw.get("keywords"), list) else []
+    keywords = [str(k).strip() for k in keywords_raw if str(k).strip()]
+    citations = _normalize_citations(raw.get("citations"))
+    if not citations:
+        citations = [{"page": page, "chunk_id": chunk_id}]
+    return {
+        "page": page,
+        "chunk_id": chunk_id,
+        "mini_summary": mini_summary,
+        "keywords": keywords,
+        "citations": citations,
+    }
+
+
+def normalize_concepts(raw: Any) -> List[Concept]:
+    concepts: List[Concept] = []
+    if not isinstance(raw, list):
+        return concepts
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        description = str(item.get("description", "")).strip()
+        citations = _normalize_citations(item.get("citations"))
+        difficulty = str(item.get("difficulty", "medium")).lower()
+        if name:
+            concepts.append(
+                {
+                    "name": name,
+                    "description": description,
+                    "citations": citations,
+                    "difficulty": difficulty,
+                }
+            )
+    return concepts
