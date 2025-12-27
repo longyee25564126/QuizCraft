@@ -5,7 +5,7 @@ from quizcraft.config import Settings
 from quizcraft.export import export_json, export_markdown, export_text
 from quizcraft.pipeline import run_pipeline
 from quizcraft.quiz import run_quiz
-from quizcraft.utils import log_step
+from quizcraft.utils import log_step, parse_page_ranges
 
 
 def parse_args() -> argparse.Namespace:
@@ -16,18 +16,35 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--n-questions", type=int, default=None, help="Number of questions")
     parser.add_argument("--question-count", type=int, default=None, help="Number of questions (alias)")
-    parser.add_argument("--question-types", default=None, help="Comma-separated types (tf,mcq)")
+    parser.add_argument("--question-types", default=None, help="Comma-separated types (tf,mcq,short,calc)")
 
     parser.add_argument("--summary-len", type=int, default=None, help="Target summary length (chars)")
     parser.add_argument("--summary-min", type=int, default=None, help="Minimum summary length (chars)")
     parser.add_argument("--summary-max", type=int, default=None, help="Maximum summary length (chars)")
+    parser.add_argument("--summary-budget-tokens", type=int, default=None, help="Total token budget for summaries")
+    parser.add_argument("--evidence-budget-tokens", type=int, default=None, help="Token budget per question evidence")
 
-    parser.add_argument("--chunk-chars", type=int, default=None, help="Chunk target chars")
-    parser.add_argument("--overlap-chars", type=int, default=None, help="Chunk overlap chars")
+    parser.add_argument("--chunk-chars", type=int, default=None, help="Chunk target chars (legacy)")
+    parser.add_argument("--overlap-chars", type=int, default=None, help="Chunk overlap chars (legacy)")
+    parser.add_argument("--chunk-tokens", type=int, default=None, help="Chunk target tokens")
+    parser.add_argument("--overlap-tokens", type=int, default=None, help="Chunk overlap tokens")
+    parser.add_argument("--min-chunk-tokens", type=int, default=None, help="Minimum tokens per chunk")
 
     parser.add_argument("--max-chunks", type=int, default=None, help="Max chunks to process")
     parser.add_argument("--top-k-chunks", type=int, default=None, help="Top-K chunks for selector")
     parser.add_argument("--long-doc-threshold-pages", type=int, default=None, help="Pages threshold to enable selector")
+
+    parser.add_argument("--pages", default=None, help="Page range filter, e.g. 1-5,8,10")
+    parser.add_argument("--max-pages", type=int, default=None, help="Limit number of pages from start")
+    parser.add_argument("--chapter", default=None, help="Chapter keyword filter (e.g. 第3章)")
+
+    parser.add_argument("--enable-ocr", action="store_true", help="Enable OCR fallback for scanned pages")
+    parser.add_argument("--ocr-engine", default=None, help="OCR engine: tesseract|easyocr")
+    parser.add_argument("--ocr-lang", default=None, help="OCR language, e.g. chi_tra+eng")
+
+    parser.add_argument("--embed-cache", action="store_true", help="Enable embedding cache")
+    parser.add_argument("--no-embed-cache", action="store_true", help="Disable embedding cache")
+    parser.add_argument("--embed-cache-dir", default=None, help="Embedding cache directory")
 
     parser.add_argument("--base-url", dest="base_url", default=None, help="Ollama base URL")
     parser.add_argument("--ollama-base-url", dest="base_url", default=None, help="Ollama base URL")
@@ -55,6 +72,13 @@ def main() -> None:
         summary_min = max(50, args.summary_len - 10)
         summary_max = args.summary_len + 10
 
+    pages_filter = parse_page_ranges(args.pages)
+    embed_cache_enabled = None
+    if args.embed_cache:
+        embed_cache_enabled = True
+    if args.no_embed_cache:
+        embed_cache_enabled = False
+
     settings = Settings.from_args(
         base_url=args.base_url,
         chat_model=args.chat_model,
@@ -63,15 +87,28 @@ def main() -> None:
         question_types=question_types,
         summary_min_chars=summary_min,
         summary_max_chars=summary_max,
+        summary_budget_tokens=args.summary_budget_tokens,
+        evidence_budget_tokens=args.evidence_budget_tokens,
         max_context_chars=args.max_context,
         max_input_chars=args.max_input,
         chunk_chars=args.chunk_chars,
         overlap_chars=args.overlap_chars,
+        chunk_tokens=args.chunk_tokens,
+        overlap_tokens=args.overlap_tokens,
+        min_chunk_tokens=args.min_chunk_tokens,
         long_doc_threshold_pages=args.long_doc_threshold_pages,
         top_k_chunks=args.top_k_chunks,
         max_chunks=args.max_chunks,
         chat_timeout=args.chat_timeout,
         reduce_timeout=args.reduce_timeout,
+        enable_ocr=args.enable_ocr if args.enable_ocr else None,
+        ocr_engine=args.ocr_engine,
+        ocr_lang=args.ocr_lang,
+        pages_filter=pages_filter,
+        max_pages=args.max_pages,
+        chapter_filter=args.chapter,
+        embed_cache_enabled=embed_cache_enabled,
+        embed_cache_dir=args.embed_cache_dir,
         seed=args.seed,
     )
 

@@ -64,6 +64,7 @@ def select_chunks(
         "結論",
         "定義",
         "方法",
+        "例子",
     ]
     query_embeddings = [embed(q) for q in queries]
 
@@ -77,22 +78,23 @@ def select_chunks(
     if not balanced:
         return [item[1] for item in scored[:top_k]]
 
-    pages = {chunk["page"] for chunk in chunks}
-    total_pages = max(pages) if pages else 1
-    bucket_size = max(1, total_pages // 10)
-    bucket_limits: Dict[int, int] = {}
-    max_per_bucket = max(1, top_k // max(1, min(10, total_pages)))
+    buckets: Dict[str, int] = {}
+    for _, chunk in scored:
+        key = chunk.get("section_title") or f"page_{chunk['page']}"
+        buckets.setdefault(key, 0)
+
+    max_per_bucket = max(1, top_k // max(1, len(buckets)))
 
     random.seed(seed)
     selected: List[Dict[str, str]] = []
     remainder: List[Dict[str, str]] = []
 
     for _, chunk in scored:
-        bucket = (chunk["page"] - 1) // bucket_size
-        count = bucket_limits.get(bucket, 0)
+        bucket = chunk.get("section_title") or f"page_{chunk['page']}"
+        count = buckets.get(bucket, 0)
         if count < max_per_bucket:
             selected.append(chunk)
-            bucket_limits[bucket] = count + 1
+            buckets[bucket] = count + 1
         else:
             remainder.append(chunk)
         if len(selected) >= top_k:

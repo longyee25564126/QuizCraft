@@ -24,8 +24,8 @@ def _grade_tf(user_answer: str, correct: str) -> bool:
     return _normalize_tf(user_answer) == _normalize_tf(correct)
 
 
-def _grade_mcq(user_answer: str, correct: str, choices: List[str]) -> bool:
-    correct_letter = _extract_choice_letter(correct)
+def _grade_mcq(user_answer: str, correct: str, choices: List[str], correct_option: str = "") -> bool:
+    correct_letter = correct_option.upper() if correct_option else _extract_choice_letter(correct)
     if not correct_letter and choices:
         for idx, choice in enumerate(choices):
             if correct.strip().lower() == choice.strip().lower():
@@ -44,12 +44,27 @@ def _grade_mcq(user_answer: str, correct: str, choices: List[str]) -> bool:
     return False
 
 
+def _grade_short(user_answer: str, correct: str) -> bool:
+    return user_answer.strip().lower() == correct.strip().lower()
+
+
+def _grade_calc(user_answer: str, correct: str) -> bool:
+    return re.sub(r"\s+", "", user_answer) == re.sub(r"\s+", "", correct)
+
+
 def grade_answer(question: Question, user_answer: str) -> bool:
     q_type = question.get("type", "tf")
     if q_type == "mcq":
-        return _grade_mcq(user_answer, question.get("answer", ""), question.get("choices", []))
+        return _grade_mcq(
+            user_answer,
+            question.get("answer", ""),
+            question.get("choices", []),
+            question.get("correct_option", ""),
+        )
     if q_type == "short":
-        return user_answer.strip().lower() == question.get("answer", "").strip().lower()
+        return _grade_short(user_answer, question.get("answer", ""))
+    if q_type == "calc":
+        return _grade_calc(user_answer, question.get("final_answer", question.get("answer", "")))
     return _grade_tf(user_answer, question.get("answer", ""))
 
 
@@ -58,6 +73,13 @@ def _format_citations(question: Question) -> str:
     if not citations:
         return "N/A"
     return ", ".join(f"p{c['page']}:{c['chunk_id']}" for c in citations)
+
+
+def _format_quotes(question: Question) -> str:
+    quotes = question.get("evidence_quotes", [])
+    if not quotes:
+        return "N/A"
+    return " / ".join(f"{q['quote']}" for q in quotes)
 
 
 def run_quiz(questions: List[Question]) -> Tuple[int, List[str]]:
@@ -91,8 +113,12 @@ def run_quiz(questions: List[Question]) -> Tuple[int, List[str]]:
             wrong_ids.append(question.get("id", f"q{idx}"))
 
         print("Answer:", question.get("answer", ""))
+        if question.get("type") == "calc":
+            print("Step-by-step:", " / ".join(question.get("step_by_step", [])))
+            print("Final Answer:", question.get("final_answer", ""))
         print("Rationale:", question.get("rationale", ""))
         print("Citations:", _format_citations(question))
+        print("Evidence Quotes:", _format_quotes(question))
 
     print("\n=== Quiz Summary ===")
     print(f"Score: {score}/{len(questions)}")
